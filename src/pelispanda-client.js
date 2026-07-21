@@ -57,6 +57,11 @@ export function parseMagnet(download, episodeMatched = false) {
   };
 }
 
+export function downloadsFromResponses(detail, supplemental) {
+  if (Array.isArray(detail?.downloads) && detail.downloads.length) return detail.downloads;
+  return Array.isArray(supplemental?.downloads) ? supplemental.downloads : [];
+}
+
 export class PelisPandaClient {
   constructor({ baseUrl = 'https://pelispanda.org/wp-json/wpreact/v1/', metadataUrl = 'https://v3-cinemeta.strem.io/', apiKey, timeoutMs, maxResponseBytes, catalogFallbackPages = 10, fetchImpl } = {}) {
     this.api = new SourceClient({ baseUrl, apiKey, timeoutMs, maxResponseBytes, fetchImpl });
@@ -108,8 +113,12 @@ export class PelisPandaClient {
     match ||= titleFallback;
     if (!match?.slug) return [];
 
-    const detail = await this.api.getJson(`${type === 'movie' ? 'movie' : 'serie'}/${encodeURIComponent(match.slug)}`);
-    let downloads = Array.isArray(detail?.downloads) ? detail.downloads : [];
+    const detailPath = `${type === 'movie' ? 'movie' : 'serie'}/${encodeURIComponent(match.slug)}`;
+    const detail = await this.api.getJson(detailPath);
+    const supplemental = Array.isArray(detail?.downloads) && detail.downloads.length
+      ? null
+      : await this.api.getJson(`${detailPath}/related`);
+    let downloads = downloadsFromResponses(detail, supplemental);
     if (type === 'series') {
       downloads = downloads.flat(Infinity).filter((item) => Number(item?.season) === season && Number(item?.episode) === episode);
     }

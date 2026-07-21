@@ -21,7 +21,7 @@ Edite `.env`:
 - `CACHE_TTL_SECONDS`: duración de la caché en memoria.
 - `MAX_RESPONSE_BYTES`: límite de la respuesta JSON (por defecto 1 MiB).
 
-El addon usa los endpoints públicos observados de PelisPanda: `/search`, `/movie/{slug}` y `/serie/{slug}`. Primero identifica resultados mediante `tmdb_id`; si PelisPanda tiene ese ID ausente o incorrecto, permite una coincidencia exacta y normalizada con `title` u `original_title`, siempre exigiendo también el mismo tipo y año. Los magnets se interpretan como datos; nunca se evalúa JavaScript de la fuente. En producción, la fuente debe ser HTTP(S) pública. Los hosts privados se permiten solamente para `localhost`/`127.0.0.1` fuera de producción, facilitando la API simulada.
+El addon usa los endpoints públicos observados de PelisPanda: `/search`, `/movie/{slug}`, `/serie/{slug}` y sus rutas `/related`, donde la API también entrega los torrents de episodios. Primero identifica resultados mediante `tmdb_id`; si PelisPanda tiene ese ID ausente o incorrecto, permite una coincidencia exacta y normalizada con `title` u `original_title`, siempre exigiendo también el mismo tipo y año. Los magnets se interpretan como datos; nunca se evalúa JavaScript de la fuente. En producción, la fuente debe ser HTTP(S) pública. Los hosts privados se permiten solamente para `localhost`/`127.0.0.1` fuera de producción, facilitando la API simulada.
 
 ## Prueba local
 

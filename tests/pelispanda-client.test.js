@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { findMatchingCandidate, parseMagnet, parseSize, PelisPandaClient } from '../src/pelispanda-client.js';
+import { downloadsFromResponses, findMatchingCandidate, parseMagnet, parseSize, PelisPandaClient } from '../src/pelispanda-client.js';
 
 describe('adaptador de PelisPanda', () => {
   it('convierte tamaños legibles a bytes', () => {
@@ -47,5 +47,10 @@ describe('adaptador de PelisPanda', () => {
     };
     await expect(client.findInCatalog({ tmdbId: '687163', title: 'Project Hail Mary', year: 2026, type: 'movie' })).resolves.toMatchObject({ slug: 'proyecto-fin-del-mundo' });
     expect(client.api.getJson).toHaveBeenCalledTimes(2);
+  });
+  it('obtiene episodios desde la respuesta supplemental de series', () => {
+    const episode = { season: 2, episode: 9, download_link: 'magnet:?...' };
+    expect(downloadsFromResponses({ title: 'Serie' }, { downloads: [episode] })).toEqual([episode]);
+    expect(downloadsFromResponses({ downloads: [episode] }, { downloads: [] })).toEqual([episode]);
   });
 });
