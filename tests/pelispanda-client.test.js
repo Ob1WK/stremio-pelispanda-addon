@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { findMatchingCandidate, parseMagnet, parseSize } from '../src/pelispanda-client.js';
+import { describe, expect, it, vi } from 'vitest';
+import { findMatchingCandidate, parseMagnet, parseSize, PelisPandaClient } from '../src/pelispanda-client.js';
 
 describe('adaptador de PelisPanda', () => {
   it('convierte tamaños legibles a bytes', () => {
@@ -33,5 +33,19 @@ describe('adaptador de PelisPanda', () => {
     const results = [{ type: 'serie', title: 'Dark', original_title: 'Dark', year: '2017' }];
     expect(findMatchingCandidate(results, { tmdbId: 'x', title: 'Dark', year: 2024, type: 'series' })).toBeNull();
     expect(findMatchingCandidate(results, { tmdbId: 'x', title: 'Dark', year: 2017, type: 'movie' })).toBeNull();
+  });
+  it('busca el TMDB en páginas limitadas del catálogo', async () => {
+    const client = Object.create(PelisPandaClient.prototype);
+    client.catalogFallbackPages = 3;
+    client.api = {
+      baseUrl: 'https://pelispanda.org/wp-json/wpreact/v1/',
+      getJson: vi.fn(async (url) => ({
+        movies: Number(url.searchParams.get('page')) === 2
+          ? [{ type: 'pelicula', tmdb_id: '687163', slug: 'proyecto-fin-del-mundo' }]
+          : Array.from({ length: 100 }, (_, index) => ({ type: 'pelicula', tmdb_id: `otro-${index}` }))
+      }))
+    };
+    await expect(client.findInCatalog({ tmdbId: '687163', title: 'Project Hail Mary', year: 2026, type: 'movie' })).resolves.toMatchObject({ slug: 'proyecto-fin-del-mundo' });
+    expect(client.api.getJson).toHaveBeenCalledTimes(2);
   });
 });

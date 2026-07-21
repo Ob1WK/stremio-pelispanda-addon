@@ -58,9 +58,27 @@ export function parseMagnet(download, episodeMatched = false) {
 }
 
 export class PelisPandaClient {
-  constructor({ baseUrl = 'https://pelispanda.org/wp-json/wpreact/v1/', metadataUrl = 'https://v3-cinemeta.strem.io/', apiKey, timeoutMs, maxResponseBytes, fetchImpl } = {}) {
+  constructor({ baseUrl = 'https://pelispanda.org/wp-json/wpreact/v1/', metadataUrl = 'https://v3-cinemeta.strem.io/', apiKey, timeoutMs, maxResponseBytes, catalogFallbackPages = 10, fetchImpl } = {}) {
     this.api = new SourceClient({ baseUrl, apiKey, timeoutMs, maxResponseBytes, fetchImpl });
     this.metadata = new SourceClient({ baseUrl: metadataUrl, timeoutMs, maxResponseBytes, fetchImpl });
+    this.catalogFallbackPages = Math.min(25, Math.max(0, Number(catalogFallbackPages) || 0));
+  }
+
+  async findInCatalog({ tmdbId, title, year, type }) {
+    const resource = type === 'movie' ? 'movies' : 'series';
+    const property = resource;
+    let titleFallback;
+    for (let page = 1; page <= this.catalogFallbackPages; page += 1) {
+      const url = new URL(resource, this.api.baseUrl);
+      url.searchParams.set('posts_per_page', '100');
+      url.searchParams.set('page', String(page));
+      const data = await this.api.getJson(url);
+      const candidate = findMatchingCandidate(data?.[property], { tmdbId, title, year, type });
+      if (candidate && String(candidate.tmdb_id || '') === tmdbId) return candidate;
+      titleFallback ||= candidate;
+      if (!Array.isArray(data?.[property]) || data[property].length < 100) break;
+    }
+    return titleFallback || null;
   }
 
   async search({ imdbId, season, episode }) {
@@ -86,6 +104,7 @@ export class PelisPandaClient {
       }
       titleFallback ||= candidate;
     }
+    if (!match) match = await this.findInCatalog({ tmdbId, title, year, type });
     match ||= titleFallback;
     if (!match?.slug) return [];
 

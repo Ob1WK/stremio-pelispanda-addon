@@ -83,7 +83,7 @@ export function createFromEnv(env = process.env) {
   const allowPrivate = ['localhost', '127.0.0.1', '::1'].includes(url.hostname) && env.NODE_ENV !== 'production';
   const common = { baseUrl: url.href, apiKey: env.SOURCE_API_KEY, maxResponseBytes: Number(env.MAX_RESPONSE_BYTES) || 1048576 };
   const client = url.hostname === 'pelispanda.org'
-    ? new PelisPandaClient({ ...common, metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/' })
+    ? new PelisPandaClient({ ...common, metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/', catalogFallbackPages: Number(env.CATALOG_FALLBACK_PAGES) || 10 })
     : new SourceClient({ ...common, allowPrivate });
   return createAddon({ name: env.ADDON_NAME || 'PelisPanda Addon', id: env.ADDON_ID || 'org.example.authorized-torrents', client, ttlSeconds: Number(env.CACHE_TTL_SECONDS) || 300 });
 }

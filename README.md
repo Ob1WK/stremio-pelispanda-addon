@@ -17,6 +17,7 @@ Edite `.env`:
 - `SOURCE_API_URL`: URL base de PelisPanda. El valor predeterminado es `https://pelispanda.org/wp-json/wpreact/v1/`.
 - `SOURCE_API_KEY`: opcional; se envía como `Authorization: Bearer <clave>`.
 - `METADATA_API_URL`: API de metadatos de Stremio/Cinemeta usada para traducir IMDb a TMDB. El resultado de PelisPanda se valida por coincidencia exacta de `tmdb_id`.
+- `CATALOG_FALLBACK_PAGES`: páginas de 100 resultados que se revisan por TMDB cuando `/search` no indexa el título original; máximo 25.
 - `CACHE_TTL_SECONDS`: duración de la caché en memoria.
 - `MAX_RESPONSE_BYTES`: límite de la respuesta JSON (por defecto 1 MiB).
 
@@ -60,6 +61,7 @@ ADDON_NAME=PelisPanda Addon
 ADDON_ID=org.example.authorized-torrents
 SOURCE_API_URL=https://pelispanda.org/wp-json/wpreact/v1/
 METADATA_API_URL=https://v3-cinemeta.strem.io/
+CATALOG_FALLBACK_PAGES=10
 CACHE_TTL_SECONDS=300
 MAX_RESPONSE_BYTES=1048576
 NODE_ENV=production
