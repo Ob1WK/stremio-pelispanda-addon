@@ -1,0 +1,24 @@
+{
+  "name": "authorized-torrent-stremio-addon",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/index.js",
+    "mock-api": "node mock-api/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "stremio-addon-sdk": "^1.6.10"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0"
+  },
+  "overrides": {
+    "path-to-regexp": "0.1.13",
+    "tmp": "0.2.7"
+  }
+}

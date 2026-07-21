@@ -1,0 +1,60 @@
+# Addon de Stremio para una fuente autorizada
+
+Addon de Node.js 20+ que consulta una API HTTP, valida sus resultados y publica streams BitTorrent para películas y series. Úselo exclusivamente con contenido propio, autorizado o de dominio público.
+
+## Instalación y configuración
+
+```bash
+npm install
+copy .env.example .env
+```
+
+Edite `.env`:
+
+- `ADDON_NAME`: nombre visible en Stremio.
+- `ADDON_ID`: identificador estable y único del addon.
+- `PORT`: puerto del addon (por defecto `7000`).
+- `SOURCE_API_URL`: URL base de PelisPanda. El valor predeterminado es `https://pelispanda.org/wp-json/wpreact/v1/`.
+- `SOURCE_API_KEY`: opcional; se envía como `Authorization: Bearer <clave>`.
+- `METADATA_API_URL`: API de metadatos de Stremio/Cinemeta usada para traducir IMDb a TMDB. El resultado de PelisPanda se valida por coincidencia exacta de `tmdb_id`.
+- `CACHE_TTL_SECONDS`: duración de la caché en memoria.
+- `MAX_RESPONSE_BYTES`: límite de la respuesta JSON (por defecto 1 MiB).
+
+El addon usa los endpoints públicos observados de PelisPanda: `/search`, `/movie/{slug}` y `/serie/{slug}`. Los magnets se interpretan como datos; nunca se evalúa JavaScript de la fuente. En producción, la fuente debe ser HTTP(S) pública. Los hosts privados se permiten solamente para `localhost`/`127.0.0.1` fuera de producción, facilitando la API simulada.
+
+## Prueba local
+
+En una terminal:
+
+```bash
+npm run mock-api
+```
+
+En otra:
+
+```bash
+SOURCE_API_URL=http://127.0.0.1:7100
+npm start
+```
+
+En PowerShell use `$env:SOURCE_API_URL="http://127.0.0.1:7100"` antes de `npm.cmd start`. Sin esa variable, el addon consulta directamente la API pública de PelisPanda.
+
+Abra `http://localhost:7000/manifest.json` e instale esa URL en Stremio. Ejemplos directos: `/stream/movie/tt123.json` y `/stream/series/tt123:1:2.json`.
+
+Para probar desde otro dispositivo de la red local, permita el puerto `7000` en el firewall y use la IP LAN de la computadora, por ejemplo `http://192.168.1.20:7000/manifest.json`. Ambos dispositivos deben estar en la misma red. Algunas versiones o plataformas de Stremio pueden exigir HTTPS para addons remotos.
+
+## Despliegue con HTTPS
+
+Ejecute el proceso detrás de un proxy inverso como Caddy, nginx o un proveedor con TLS administrado. Publique únicamente el puerto HTTPS, configure un certificado válido y establezca `SOURCE_API_URL` con la API real. En producción use `NODE_ENV=production`; esto bloquea fuentes que resuelvan a redes privadas, incluso después de una redirección. Instale en Stremio `https://su-dominio.example/manifest.json`.
+
+## API simulada y contrato alternativo
+
+Cuando `SOURCE_API_URL` no apunta a `pelispanda.org`, se usa el contrato genérico de la API simulada: `GET /movie` o `/series`, con una respuesta `{ "results": [...] }`. Cada resultado puede incluir `infoHash`, `fileIdx`, `quality`, `size`, `seeders` y `trackers`. Para torrents de series sin `fileIdx`, incluya `files` con objetos `{ "index", "name", "size" }`; el addon reconoce `S01E02`, `1x02` y `Season 1 Episode 2`, y excluye samples, trailers y archivos menores de 100 MiB.
+
+## Pruebas
+
+```bash
+npm test
+```
+
+La caché es local al proceso y se vacía al reiniciarlo. Para varias réplicas, cada una conserva su propia caché.
