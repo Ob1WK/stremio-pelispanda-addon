@@ -1,4 +1,4 @@
-# Addon de Stremio para una fuente autorizada
+# PelisPanda Addon para Stremio
 
 Addon de Node.js 20+ que consulta una API HTTP, valida sus resultados y publica streams BitTorrent para películas y series. Úselo exclusivamente con contenido propio, autorizado o de dominio público.
 
@@ -20,7 +20,7 @@ Edite `.env`:
 - `CACHE_TTL_SECONDS`: duración de la caché en memoria.
 - `MAX_RESPONSE_BYTES`: límite de la respuesta JSON (por defecto 1 MiB).
 
-El addon usa los endpoints públicos observados de PelisPanda: `/search`, `/movie/{slug}` y `/serie/{slug}`. Los magnets se interpretan como datos; nunca se evalúa JavaScript de la fuente. En producción, la fuente debe ser HTTP(S) pública. Los hosts privados se permiten solamente para `localhost`/`127.0.0.1` fuera de producción, facilitando la API simulada.
+El addon usa los endpoints públicos observados de PelisPanda: `/search`, `/movie/{slug}` y `/serie/{slug}`. Primero identifica resultados mediante `tmdb_id`; si PelisPanda tiene ese ID ausente o incorrecto, permite una coincidencia exacta y normalizada con `title` u `original_title`, siempre exigiendo también el mismo tipo y año. Los magnets se interpretan como datos; nunca se evalúa JavaScript de la fuente. En producción, la fuente debe ser HTTP(S) pública. Los hosts privados se permiten solamente para `localhost`/`127.0.0.1` fuera de producción, facilitando la API simulada.
 
 ## Prueba local
 
@@ -46,6 +46,29 @@ Para probar desde otro dispositivo de la red local, permita el puerto `7000` en 
 ## Despliegue con HTTPS
 
 Ejecute el proceso detrás de un proxy inverso como Caddy, nginx o un proveedor con TLS administrado. Publique únicamente el puerto HTTPS, configure un certificado válido y establezca `SOURCE_API_URL` con la API real. En producción use `NODE_ENV=production`; esto bloquea fuentes que resuelvan a redes privadas, incluso después de una redirección. Instale en Stremio `https://su-dominio.example/manifest.json`.
+
+### Vercel
+
+El proyecto exporta una aplicación Express compatible con la detección automática de Vercel y sigue conservando `npm start` para uso local.
+
+1. En Vercel, seleccione **Add New → Project** e importe el repositorio privado `Ob1WK/stremio-pelispanda-addon`.
+2. Deje el directorio raíz en `.`. Vercel detectará la aplicación Node/Express; no configure un directorio de salida.
+3. Agregue estas variables de entorno:
+
+```dotenv
+ADDON_NAME=PelisPanda Addon
+ADDON_ID=org.example.authorized-torrents
+SOURCE_API_URL=https://pelispanda.org/wp-json/wpreact/v1/
+METADATA_API_URL=https://v3-cinemeta.strem.io/
+CACHE_TTL_SECONDS=300
+MAX_RESPONSE_BYTES=1048576
+NODE_ENV=production
+```
+
+4. Presione **Deploy** y verifique `https://su-proyecto.vercel.app/manifest.json`.
+5. Pegue esa URL completa en **Add-on Repository URL** de Stremio.
+
+Vercel puede apagar o reemplazar instancias sin tráfico. Por ello la caché en memoria es oportunista: mejora solicitudes que llegan a la misma instancia activa, pero no es persistente ni compartida entre instancias. Esto no afecta la corrección de los streams.
 
 ## API simulada y contrato alternativo
 

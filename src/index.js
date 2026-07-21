@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import express from 'express';
 import stremioSdk from 'stremio-addon-sdk';
 import { pathToFileURL } from 'node:url';
 import { TtlCache } from './cache.js';
@@ -6,7 +7,7 @@ import { SourceClient } from './source-client.js';
 import { PelisPandaClient } from './pelispanda-client.js';
 import { isValidInfoHash, parseStremioId, safeTrackers } from './validators.js';
 
-const { addonBuilder, serveHTTP } = stremioSdk;
+const { addonBuilder, getRouter } = stremioSdk;
 
 const qualityScore = (quality = '') => {
   const value = String(quality).toLowerCase();
@@ -55,7 +56,7 @@ export function resultToStream(result, { name, series }) {
   };
 }
 
-export function createAddon({ name = 'Mi fuente', id = 'org.example.authorized-torrents', client, ttlSeconds = 300, logger = console } = {}) {
+export function createAddon({ name = 'PelisPanda Addon', id = 'org.example.authorized-torrents', client, ttlSeconds = 300, logger = console } = {}) {
   const builder = new addonBuilder({ id, version: '1.0.0', name, description: 'Streams BitTorrent de una fuente autorizada', resources: ['stream'], types: ['movie', 'series'], catalogs: [], idPrefixes: ['tt'] });
   const cache = new TtlCache(ttlSeconds);
   builder.defineStreamHandler(async ({ type, id: streamId }) => {
@@ -84,10 +85,20 @@ export function createFromEnv(env = process.env) {
   const client = url.hostname === 'pelispanda.org'
     ? new PelisPandaClient({ ...common, metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/' })
     : new SourceClient({ ...common, allowPrivate });
-  return createAddon({ name: env.ADDON_NAME || 'Mi fuente', id: env.ADDON_ID || 'org.example.authorized-torrents', client, ttlSeconds: Number(env.CACHE_TTL_SECONDS) || 300 });
+  return createAddon({ name: env.ADDON_NAME || 'PelisPanda Addon', id: env.ADDON_ID || 'org.example.authorized-torrents', client, ttlSeconds: Number(env.CACHE_TTL_SECONDS) || 300 });
 }
 
+export function createHttpApp(addon = createFromEnv()) {
+  const app = express();
+  app.disable('x-powered-by');
+  app.use('/', getRouter(addon));
+  return app;
+}
+
+const app = createHttpApp();
+export default app;
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const addon = createFromEnv();
-  serveHTTP(addon, { port: Number(process.env.PORT) || 7000 });
+  const port = Number(process.env.PORT) || 7000;
+  app.listen(port, () => console.log(`PelisPanda Addon disponible en http://127.0.0.1:${port}/manifest.json`));
 }

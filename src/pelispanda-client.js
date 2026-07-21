@@ -9,6 +9,26 @@ function titleQueries(title) {
   return [...new Set([title, ...useful])].slice(0, 5);
 }
 
+function normalizeTitle(value) {
+  return String(value || '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+export function findMatchingCandidate(results, { tmdbId, title, year, type }) {
+  if (!Array.isArray(results)) return null;
+  const expectedType = type === 'movie' ? 'pelicula' : 'serie';
+  const typed = results.filter((item) => item?.type === expectedType);
+  const byId = typed.find((item) => String(item?.tmdb_id || '') === String(tmdbId || ''));
+  if (byId) return byId;
+
+  const expectedTitle = normalizeTitle(title);
+  const expectedYear = Number.parseInt(year, 10);
+  if (!expectedTitle || !Number.isInteger(expectedYear)) return null;
+  return typed.find((item) => {
+    const sameTitle = [item?.title, item?.original_title].some((candidate) => normalizeTitle(candidate) === expectedTitle);
+    return sameTitle && Number.parseInt(item?.year, 10) === expectedYear;
+  }) || null;
+}
+
 export function parseSize(value) {
   const match = /^\s*([\d.,]+)\s*(KB|MB|GB|TB)\s*$/i.exec(String(value || ''));
   if (!match) return undefined;
@@ -48,18 +68,25 @@ export class PelisPandaClient {
     const metadata = await this.metadata.getJson(`meta/${type}/${encodeURIComponent(imdbId)}.json`);
     const tmdbId = String(metadata?.meta?.moviedb_id || '');
     const title = metadata?.meta?.name;
+    const year = metadata?.meta?.year || metadata?.meta?.releaseInfo || metadata?.meta?.released;
     if (!tmdbId || !title) return [];
 
     let match;
+    let titleFallback;
     for (const query of titleQueries(title)) {
       const url = new URL('search', this.api.baseUrl);
       url.searchParams.set('query', query);
       url.searchParams.set('posts_per_page', '100');
       url.searchParams.set('page', '1');
       const data = await this.api.getJson(url);
-      match = data?.results?.find((item) => String(item?.tmdb_id) === tmdbId && item?.type === (type === 'movie' ? 'pelicula' : 'serie'));
-      if (match) break;
+      const candidate = findMatchingCandidate(data?.results, { tmdbId, title, year, type });
+      if (candidate && String(candidate.tmdb_id || '') === tmdbId) {
+        match = candidate;
+        break;
+      }
+      titleFallback ||= candidate;
     }
+    match ||= titleFallback;
     if (!match?.slug) return [];
 
     const detail = await this.api.getJson(`${type === 'movie' ? 'movie' : 'serie'}/${encodeURIComponent(match.slug)}`);
