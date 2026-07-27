@@ -1,8 +1,8 @@
 # streaMX para Stremio
 
-Addon de Node.js 20+ que combina los torrents de PelisPanda con los streams HTTP/HLS y reproductores web de NOVA. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
+Addon de Node.js 20+ que combina los torrents de PelisPanda con los streams HTTP/HLS directos y latinos de NOVA. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
 
-Las fuentes HLS o de video directo se reproducen en Stremio. Cuando NOVA solo entrega un reproductor web, streaMX lo expone como enlace externo en lugar de intentar reproducir HTML como video.
+streaMX descarta los reproductores web, los embeds y las fuentes de NOVA que no estén marcadas como latino. Solo muestra fuentes NOVA que Stremio pueda reproducir internamente.
 
 ## Instalación y configuración
 

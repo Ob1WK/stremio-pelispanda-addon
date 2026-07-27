@@ -39,4 +39,15 @@ describe('streams', () => {
       metas: [{ id: 'nova:movie:1', type: 'movie', name: 'Película NOVA' }]
     });
   });
+  it('migra automáticamente el nombre e ID heredados de PelisPanda', async () => {
+    const { createFromEnv } = await import('../src/index.js');
+    const addon = createFromEnv({
+      ADDON_NAME: 'PelisPanda Addon',
+      ADDON_ID: 'org.example.authorized-torrents',
+      NOVA_ENABLED: 'false'
+    });
+    expect(addon.manifest.name).toBe('streaMX');
+    expect(addon.manifest.id).toBe('com.streamx.addon');
+    expect(addon.manifest.version).toBe('2.1.0');
+  });
 });

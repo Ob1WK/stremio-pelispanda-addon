@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CombinedClient, NovaClient, novaDetailMeta } from '../src/nova-client.js';
 
 describe('adaptador de NOVA', () => {
-  it('convierte HLS directos y embeds en streams de Stremio', async () => {
+  it('acepta solo HLS directos y latinos dentro de Stremio', async () => {
     const client = Object.create(NovaClient.prototype);
     client.metadata = {
       getJson: vi.fn(async () => ({ meta: { moviedb_id: 2131, name: 'Daria', year: 1997 } }))
@@ -13,8 +13,9 @@ describe('adaptador de NOVA', () => {
         if (String(path).startsWith('vod/sources')) {
           return {
             sources: [
-              { host: 'Uqload', embed_url: 'https://video.example/master.m3u8', quality: 'HD', requires_extraction: false },
-              { host: 'GoodStream', embed_url: 'https://goodstream.example/embed-123.html', quality: 'HD', requires_extraction: true }
+              { host: 'Uqload', embed_url: 'https://video.example/master.m3u8', quality: 'HD', language: 'LAT', requires_extraction: false },
+              { host: 'GoodStream', embed_url: 'https://goodstream.example/embed-123.html', quality: 'HD', language: 'Latino', requires_extraction: true },
+              { host: 'English', embed_url: 'https://video.example/english.m3u8', quality: 'HD', language: 'English', requires_extraction: false }
             ]
           };
         }
@@ -23,10 +24,9 @@ describe('adaptador de NOVA', () => {
     };
 
     const streams = await client.search({ imdbId: 'tt0118298', season: 1, episode: 1 });
-    expect(streams).toEqual(expect.arrayContaining([
-      expect.objectContaining({ provider: 'NOVA', url: 'https://video.example/master.m3u8' }),
-      expect.objectContaining({ provider: 'NOVA', externalUrl: 'https://goodstream.example/embed-123.html' })
-    ]));
+    expect(streams).toEqual([
+      expect.objectContaining({ provider: 'NOVA', url: 'https://video.example/master.m3u8', language: 'Latino' })
+    ]);
   });
 
   it('crea episodios reproducibles para el catálogo propio', () => {

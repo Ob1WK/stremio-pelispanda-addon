@@ -43,18 +43,18 @@ export function selectEpisodeFile(result, season, episode) {
 }
 
 export function resultToStream(result, { name, series }) {
-  if (result?.url || result?.externalUrl) {
+  if (result?.url) {
     const details = [
       result.provider,
       result.host,
       result.quality,
       result.language,
-      result.url ? 'Directo' : 'Abrir reproductor'
+      'Directo'
     ].filter(Boolean);
     return {
       name,
       title: details.join(' · '),
-      ...(result.url ? { url: result.url } : { externalUrl: result.externalUrl }),
+      url: result.url,
       ...(result.behaviorHints ? { behaviorHints: result.behaviorHints } : {})
     };
   }
@@ -79,7 +79,7 @@ export function createAddon({ name = 'streaMX', id = 'com.streamx.addon', client
   ] : [];
   const builder = new addonBuilder({
     id,
-    version: '2.0.0',
+    version: '2.1.0',
     name,
     description: 'Streams de PelisPanda y NOVA, con catálogos NOVA integrados',
     resources: novaClient ? ['catalog', 'meta', 'stream'] : ['stream'],
@@ -156,9 +156,13 @@ export function createFromEnv(env = process.env) {
     maxResponseBytes: Number(env.NOVA_MAX_RESPONSE_BYTES) || 4 * 1024 * 1024
   });
   const client = novaClient ? new CombinedClient([pelisPandaClient, novaClient]) : pelisPandaClient;
+  const configuredName = String(env.ADDON_NAME || '').trim();
+  const configuredId = String(env.ADDON_ID || '').trim();
+  const name = !configuredName || /^pelispanda(?: addon)?$/i.test(configuredName) ? 'streaMX' : configuredName;
+  const id = !configuredId || configuredId === 'org.example.authorized-torrents' ? 'com.streamx.addon' : configuredId;
   return createAddon({
-    name: env.ADDON_NAME || 'streaMX',
-    id: env.ADDON_ID || 'com.streamx.addon',
+    name,
+    id,
     client,
     novaClient,
     ttlSeconds: Number(env.CACHE_TTL_SECONDS) || 300

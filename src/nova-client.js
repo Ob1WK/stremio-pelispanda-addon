@@ -2,6 +2,12 @@ import { SourceClient } from './source-client.js';
 
 const DIRECT_MEDIA = /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i;
 
+function isLatinoLanguage(value) {
+  const language = String(value || '').trim().toLowerCase();
+  return /^(?:lat|latam|latino|latina|es-419)$/.test(language) ||
+    /\b(?:latino|latina|latam)\b/.test(language);
+}
+
 function normalizedTitle(value) {
   return String(value || '')
     .normalize('NFKD')
@@ -30,30 +36,27 @@ function uniqueSources(payloads) {
       const direct = source.requires_extraction === false ||
         String(source.type || '').toLowerCase() === 'direct' ||
         DIRECT_MEDIA.test(url);
+      if (!direct || !isLatinoLanguage(source.language)) continue;
       sources.set(url, {
         provider: 'NOVA',
         host: source.host || source.server || source.provider || new URL(url).hostname,
         quality: source.quality || 'Auto',
-        language: source.language || 'Latino',
+        language: 'Latino',
         priority: Number(source.priority ?? 999),
-        ...(direct ? {
-          url,
-          behaviorHints: {
-            notWebReady: false,
-            proxyHeaders: {
-              request: {
-                Referer: 'https://syntorq.com/',
-                'User-Agent': 'Mozilla/5.0'
-              }
+        url,
+        behaviorHints: {
+          notWebReady: false,
+          proxyHeaders: {
+            request: {
+              Referer: 'https://syntorq.com/',
+              'User-Agent': 'Mozilla/5.0'
             }
           }
-        } : { externalUrl: url })
+        }
       });
     }
   }
-  return [...sources.values()].sort((a, b) =>
-    Number(Boolean(b.url)) - Number(Boolean(a.url)) || a.priority - b.priority
-  );
+  return [...sources.values()].sort((a, b) => a.priority - b.priority);
 }
 
 function catalogPath(type, search, skip, limit) {
