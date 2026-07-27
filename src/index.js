@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import stremioSdk from 'stremio-addon-sdk';
 import { pathToFileURL } from 'node:url';
+import { Readable } from 'node:stream';
 import { TtlCache } from './cache.js';
 import { SourceClient } from './source-client.js';
 import { PelisPandaClient } from './pelispanda-client.js';
@@ -9,6 +10,35 @@ import { CombinedClient, NovaClient } from './nova-client.js';
 import { isValidInfoHash, parseStremioId, safeTrackers } from './validators.js';
 
 const { addonBuilder, getRouter } = stremioSdk;
+const NOVA_DIRECT_HOSTS = new Set(['inyoutv.com', 'www.inyoutv.com', 'saludvdt.com', 'www.saludvdt.com']);
+
+function isAllowedNovaMediaUrl(url) {
+  return ['http:', 'https:'].includes(url.protocol) && NOVA_DIRECT_HOSTS.has(url.hostname.toLowerCase());
+}
+
+async function fetchNovaMedia(url, range) {
+  let current = url;
+  for (let redirect = 0; redirect < 5; redirect += 1) {
+    if (!isAllowedNovaMediaUrl(current)) throw new Error('Host no permitido');
+    const response = await fetch(current, {
+      redirect: 'manual',
+      headers: {
+        Accept: '*/*',
+        'User-Agent': 'Mozilla/5.0 streaMX',
+        Referer: 'https://syntorq.com/',
+        ...(range ? { Range: range } : {})
+      }
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) return response;
+      current = new URL(location, current);
+      continue;
+    }
+    return response;
+  }
+  throw new Error('Demasiadas redirecciones');
+}
 
 const qualityScore = (quality = '') => {
   const value = String(quality).toLowerCase();
@@ -79,7 +109,7 @@ export function createAddon({ name = 'streaMX', id = 'com.streamx.addon', client
   ] : [];
   const builder = new addonBuilder({
     id,
-    version: '2.1.0',
+    version: '2.1.1',
     name,
     description: 'Streams de PelisPanda y NOVA, con catálogos NOVA integrados',
     resources: novaClient ? ['catalog', 'meta', 'stream'] : ['stream'],
@@ -153,7 +183,11 @@ export function createFromEnv(env = process.env) {
   const novaClient = env.NOVA_ENABLED === 'false' ? null : new NovaClient({
     baseUrl: env.NOVA_API_URL || 'https://syntorq.com/api/',
     metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/',
-    maxResponseBytes: Number(env.NOVA_MAX_RESPONSE_BYTES) || 4 * 1024 * 1024
+    maxResponseBytes: Number(env.NOVA_MAX_RESPONSE_BYTES) || 4 * 1024 * 1024,
+    mediaProxyBaseUrl: env.ADDON_BASE_URL ||
+      (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : null) ||
+      (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : null) ||
+      `http://127.0.0.1:${Number(env.PORT) || 7000}`
   });
   const client = novaClient ? new CombinedClient([pelisPandaClient, novaClient]) : pelisPandaClient;
   const configuredName = String(env.ADDON_NAME || '').trim();
@@ -172,6 +206,28 @@ export function createFromEnv(env = process.env) {
 export function createHttpApp(addon = createFromEnv()) {
   const app = express();
   app.disable('x-powered-by');
+  app.get('/nova-media', async (request, response) => {
+    let source;
+    try {
+      source = new URL(String(request.query.url || ''));
+      if (!isAllowedNovaMediaUrl(source)) return response.status(403).json({ error: 'Proveedor directo no habilitado' });
+      const upstream = await fetchNovaMedia(source, request.headers.range);
+      if (!upstream.ok && upstream.status !== 206) {
+        return response.status(upstream.status).json({ error: 'La fuente no respondió' });
+      }
+      for (const name of ['content-type', 'content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified']) {
+        const value = upstream.headers.get(name);
+        if (value) response.setHeader(name, value);
+      }
+      response.setHeader('Cache-Control', 'private, no-store');
+      response.setHeader('Access-Control-Allow-Origin', '*');
+      response.status(upstream.status);
+      if (!upstream.body) return response.end();
+      Readable.fromWeb(upstream.body).pipe(response);
+    } catch {
+      return response.status(502).json({ error: 'No se pudo abrir la fuente directa' });
+    }
+  });
   app.use('/', getRouter(addon));
   return app;
 }

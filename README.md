@@ -16,6 +16,7 @@ Edite `.env`:
 - `ADDON_NAME`: nombre visible en Stremio.
 - `ADDON_ID`: identificador estable y único del addon.
 - `PORT`: puerto del addon (por defecto `7000`).
+- `ADDON_BASE_URL`: URL pública HTTPS del addon. En Vercel se detecta automáticamente; configúrela manualmente en otros proveedores para poder retransmitir fuentes NOVA que todavía usan HTTP.
 - `SOURCE_API_URL`: URL base de PelisPanda. El valor predeterminado es `https://pelispanda.org/wp-json/wpreact/v1/`.
 - `SOURCE_API_KEY`: opcional; se envía como `Authorization: Bearer <clave>`.
 - `METADATA_API_URL`: API de metadatos de Stremio/Cinemeta usada para traducir IMDb a TMDB. El resultado de PelisPanda se valida por coincidencia exacta de `tmdb_id`.

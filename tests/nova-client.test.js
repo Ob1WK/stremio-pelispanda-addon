@@ -4,8 +4,9 @@ import { CombinedClient, NovaClient, novaDetailMeta } from '../src/nova-client.j
 describe('adaptador de NOVA', () => {
   it('acepta solo HLS directos y latinos dentro de Stremio', async () => {
     const client = Object.create(NovaClient.prototype);
+    client.mediaProxyBaseUrl = 'https://addon.example/';
     client.metadata = {
-      getJson: vi.fn(async () => ({ meta: { moviedb_id: 2131, name: 'Daria', year: 1997 } }))
+      getJson: vi.fn(async () => ({ meta: { moviedb_id: 2131, name: 'Daria', year: '1997–' } }))
     };
     client.api = {
       getJson: vi.fn(async (path) => {
@@ -14,6 +15,7 @@ describe('adaptador de NOVA', () => {
           return {
             sources: [
               { host: 'Uqload', embed_url: 'https://video.example/master.m3u8', quality: 'HD', language: 'LAT', requires_extraction: false },
+              { host: 'mecochi', embed_url: 'http://inyoutv.com:8080/episode.mp4', quality: 'HD', language: 'es-LA', requires_extraction: false },
               { host: 'GoodStream', embed_url: 'https://goodstream.example/embed-123.html', quality: 'HD', language: 'Latino', requires_extraction: true },
               { host: 'English', embed_url: 'https://video.example/english.m3u8', quality: 'HD', language: 'English', requires_extraction: false }
             ]
@@ -24,9 +26,16 @@ describe('adaptador de NOVA', () => {
     };
 
     const streams = await client.search({ imdbId: 'tt0118298', season: 1, episode: 1 });
-    expect(streams).toEqual([
-      expect.objectContaining({ provider: 'NOVA', url: 'https://video.example/master.m3u8', language: 'Latino' })
-    ]);
+    expect(streams).toEqual(expect.arrayContaining([
+      expect.objectContaining({ provider: 'NOVA', url: 'https://video.example/master.m3u8', language: 'Latino' }),
+      expect.objectContaining({
+        provider: 'NOVA',
+        url: 'https://addon.example/nova-media?url=http%3A%2F%2Finyoutv.com%3A8080%2Fepisode.mp4',
+        language: 'Latino'
+      })
+    ]));
+    expect(client.api.getJson).toHaveBeenCalledWith(expect.stringContaining('year=1997'));
+    expect(client.api.getJson).not.toHaveBeenCalledWith(expect.stringContaining('1997%E2%80%93'));
   });
 
   it('crea episodios reproducibles para el catálogo propio', () => {

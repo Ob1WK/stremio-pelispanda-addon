@@ -3,8 +3,8 @@ import { SourceClient } from './source-client.js';
 const DIRECT_MEDIA = /\.(?:m3u8|mp4|mkv|webm)(?:$|[?#])/i;
 
 function isLatinoLanguage(value) {
-  const language = String(value || '').trim().toLowerCase();
-  return /^(?:lat|latam|latino|latina|es-419)$/.test(language) ||
+  const language = String(value || '').trim().toLowerCase().replace('_', '-');
+  return /^(?:lat|latam|latino|latina|es-la|es-419)$/.test(language) ||
     /\b(?:latino|latina|latam)\b/.test(language);
 }
 
@@ -26,7 +26,7 @@ function validHttpUrl(value) {
   }
 }
 
-function uniqueSources(payloads) {
+function uniqueSources(payloads, { mediaProxyBaseUrl } = {}) {
   const sources = new Map();
   for (const payload of payloads) {
     for (const source of payload?.sources || []) {
@@ -37,13 +37,20 @@ function uniqueSources(payloads) {
         String(source.type || '').toLowerCase() === 'direct' ||
         DIRECT_MEDIA.test(url);
       if (!direct || !isLatinoLanguage(source.language)) continue;
+      const sourceUrl = new URL(url);
+      let playableUrl = url;
+      if (sourceUrl.protocol === 'http:' && mediaProxyBaseUrl) {
+        const proxyUrl = new URL('/nova-media', mediaProxyBaseUrl);
+        proxyUrl.searchParams.set('url', url);
+        playableUrl = proxyUrl.href;
+      }
       sources.set(url, {
         provider: 'NOVA',
         host: source.host || source.server || source.provider || new URL(url).hostname,
         quality: source.quality || 'Auto',
         language: 'Latino',
         priority: Number(source.priority ?? 999),
-        url,
+        url: playableUrl,
         behaviorHints: {
           notWebReady: false,
           proxyHeaders: {
@@ -119,6 +126,7 @@ export class NovaClient {
     metadataUrl = 'https://v3-cinemeta.strem.io/',
     timeoutMs,
     maxResponseBytes = 4 * 1024 * 1024,
+    mediaProxyBaseUrl,
     fetchImpl
   } = {}) {
     this.api = new SourceClient({ baseUrl, timeoutMs, maxResponseBytes, fetchImpl });
@@ -128,6 +136,7 @@ export class NovaClient {
       maxResponseBytes,
       fetchImpl
     });
+    this.mediaProxyBaseUrl = mediaProxyBaseUrl;
   }
 
   supports(params) {
@@ -166,25 +175,30 @@ export class NovaClient {
     return null;
   }
 
-  async episodeSources({ tmdbId, title, year, novaId: seriesId, season, episode }) {
+  async episodeSources({ tmdbId, imdbId, title, year, novaId: seriesId, season, episode }) {
+    const imdbQuery = imdbId ? `&imdb_id=${encodeURIComponent(imdbId)}` : '';
     const paths = [
-      tmdbId ? `vod/sources/tv/${tmdbId}/${season}/${episode}?title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}` : null,
-      tmdbId ? `sources/tv/${tmdbId}/${season}/${episode}` : null,
+      tmdbId ? `vod/sources/tv/${tmdbId}/${season}/${episode}?title=${encodeURIComponent(title || '')}&year=${encodeURIComponent(year || '')}${imdbQuery}&is_anime=false` : null,
+      tmdbId ? `sources/tv/${tmdbId}/${season}/${episode}?${imdbQuery.slice(1)}` : null,
       seriesId ? `series/${seriesId}/seasons/${season}/episodes/${episode}/extract-sources` : null
     ].filter(Boolean);
     const responses = await Promise.allSettled(paths.map((path) => this.api.getJson(path)));
-    return uniqueSources(responses.filter((result) => result.status === 'fulfilled').map((result) => result.value));
+    return uniqueSources(
+      responses.filter((result) => result.status === 'fulfilled').map((result) => result.value),
+      { mediaProxyBaseUrl: this.mediaProxyBaseUrl }
+    );
   }
 
   async search(params) {
     if (params.novaId) {
       if (params.type === 'movie') {
         const detail = await this.api.getJson(`movies/${params.novaId}`);
-        return uniqueSources([detail]);
+        return uniqueSources([detail], { mediaProxyBaseUrl: this.mediaProxyBaseUrl });
       }
       const detail = await this.api.getJson(`series/${params.novaId}`);
       return this.episodeSources({
         tmdbId: detail.tmdb_id,
+        imdbId: detail.imdb_id,
         title: detail.title,
         year: detail.year,
         novaId: params.novaId,
@@ -198,16 +212,24 @@ export class NovaClient {
     const meta = metadata?.meta;
     const tmdbId = meta?.moviedb_id;
     const title = meta?.name;
-    const year = meta?.year || meta?.releaseInfo || meta?.released;
+    const parsedYear = Number.parseInt(meta?.year || meta?.releaseInfo || meta?.released, 10);
+    const year = Number.isInteger(parsedYear) ? parsedYear : undefined;
     if (!tmdbId || !title) return [];
 
     if (type === 'series') {
-      const item = await this.findItem(type, { tmdbId, title, year }).catch(() => null);
-      return this.episodeSources({
+      const directSources = await this.episodeSources({
         tmdbId,
+        imdbId: params.imdbId,
         title,
         year,
-        novaId: item?.id,
+        season: params.season,
+        episode: params.episode
+      });
+      if (directSources.length) return directSources;
+      const item = await this.findItem(type, { tmdbId, title, year }).catch(() => null);
+      if (!item?.id) return [];
+      return this.episodeSources({
+        novaId: item.id,
         season: params.season,
         episode: params.episode
       });
@@ -216,7 +238,7 @@ export class NovaClient {
     const item = await this.findItem(type, { tmdbId, title, year });
     if (!item?.id) return [];
     const detail = await this.api.getJson(`movies/${item.id}`);
-    return uniqueSources([detail]);
+    return uniqueSources([detail], { mediaProxyBaseUrl: this.mediaProxyBaseUrl });
   }
 }
 
