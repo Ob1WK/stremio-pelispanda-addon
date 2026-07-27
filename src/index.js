@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { TtlCache } from './cache.js';
 import { SourceClient } from './source-client.js';
 import { PelisPandaClient } from './pelispanda-client.js';
+import { CombinedClient, NovaClient } from './nova-client.js';
 import { isValidInfoHash, parseStremioId, safeTrackers } from './validators.js';
 
 const { addonBuilder, getRouter } = stremioSdk;
@@ -42,6 +43,21 @@ export function selectEpisodeFile(result, season, episode) {
 }
 
 export function resultToStream(result, { name, series }) {
+  if (result?.url || result?.externalUrl) {
+    const details = [
+      result.provider,
+      result.host,
+      result.quality,
+      result.language,
+      result.url ? 'Directo' : 'Abrir reproductor'
+    ].filter(Boolean);
+    return {
+      name,
+      title: details.join(' · '),
+      ...(result.url ? { url: result.url } : { externalUrl: result.externalUrl }),
+      ...(result.behaviorHints ? { behaviorHints: result.behaviorHints } : {})
+    };
+  }
   if (!result || !isValidInfoHash(result.infoHash)) return null;
   const fileIdx = series ? selectEpisodeFile(result, series.season, series.episode) :
     (Number.isInteger(result.fileIdx) && result.fileIdx >= 0 ? result.fileIdx : undefined);
@@ -49,24 +65,73 @@ export function resultToStream(result, { name, series }) {
   const details = [result.quality, formatSize(result.size), Number.isFinite(Number(result.seeders)) ? `${Number(result.seeders)} seeders` : null].filter(Boolean);
   return {
     name,
-    title: details.join(' · ') || String(result.title || name),
+    title: [result.provider, ...details].filter(Boolean).join(' · ') || String(result.title || name),
     infoHash: result.infoHash,
     ...(fileIdx !== undefined ? { fileIdx } : {}),
     sources: [`dht:${result.infoHash}`, ...safeTrackers(result.trackers).map((tracker) => `tracker:${tracker}`)]
   };
 }
 
-export function createAddon({ name = 'PelisPanda Addon', id = 'org.example.authorized-torrents', client, ttlSeconds = 300, logger = console } = {}) {
-  const builder = new addonBuilder({ id, version: '1.0.0', name, description: 'Streams BitTorrent de una fuente autorizada', resources: ['stream'], types: ['movie', 'series'], catalogs: [], idPrefixes: ['tt'] });
+export function createAddon({ name = 'streaMX', id = 'com.streamx.addon', client, novaClient, ttlSeconds = 300, logger = console } = {}) {
+  const catalogs = novaClient ? [
+    { type: 'movie', id: 'streamx-nova-movies', name: 'streaMX · NOVA Películas', extra: [{ name: 'search', isRequired: false }, { name: 'skip', isRequired: false }] },
+    { type: 'series', id: 'streamx-nova-series', name: 'streaMX · NOVA Series', extra: [{ name: 'search', isRequired: false }, { name: 'skip', isRequired: false }] }
+  ] : [];
+  const builder = new addonBuilder({
+    id,
+    version: '2.0.0',
+    name,
+    description: 'Streams de PelisPanda y NOVA, con catálogos NOVA integrados',
+    resources: novaClient ? ['catalog', 'meta', 'stream'] : ['stream'],
+    types: ['movie', 'series'],
+    catalogs,
+    idPrefixes: ['tt', 'nova:']
+  });
   const cache = new TtlCache(ttlSeconds);
+
+  if (novaClient) {
+    builder.defineCatalogHandler(async ({ type, id: catalogId, extra = {} }) => {
+      if (!['streamx-nova-movies', 'streamx-nova-series'].includes(catalogId)) return { metas: [] };
+      const expectedType = catalogId.endsWith('series') ? 'series' : 'movie';
+      if (type !== expectedType) return { metas: [] };
+      const skip = Math.max(0, Number(extra.skip) || 0);
+      const search = String(extra.search || '').trim();
+      try {
+        return await cache.getOrLoad(`catalog:${type}:${skip}:${search}`, async () => ({
+          metas: await novaClient.catalog(type, { search, skip, limit: 50 })
+        }));
+      } catch (error) {
+        logger.error?.('No se pudo obtener el catálogo de NOVA:', error?.message || error);
+        return { metas: [] };
+      }
+    });
+
+    builder.defineMetaHandler(async ({ type, id: metaId }) => {
+      const match = /^nova:(movie|series):(\d+)$/.exec(metaId);
+      if (!match || match[1] !== type) return { meta: null };
+      try {
+        return await cache.getOrLoad(`meta:${type}:${match[2]}`, async () => ({
+          meta: await novaClient.meta(type, Number(match[2]))
+        }));
+      } catch (error) {
+        logger.error?.('No se pudo obtener el detalle de NOVA:', error?.message || error);
+        return { meta: null };
+      }
+    });
+  }
+
   builder.defineStreamHandler(async ({ type, id: streamId }) => {
     const parsed = parseStremioId(type, streamId);
     if (!parsed) return { streams: [] };
-    const key = `${type}:${parsed.imdbId}:${parsed.season ?? ''}:${parsed.episode ?? ''}`;
+    const key = `stream:${type}:${parsed.imdbId || `nova-${parsed.novaId}`}:${parsed.season ?? ''}:${parsed.episode ?? ''}`;
     try {
       return await cache.getOrLoad(key, async () => {
         const results = await client.search(parsed);
-        results.sort((a, b) => qualityScore(b.quality) - qualityScore(a.quality) || Number(b.seeders || 0) - Number(a.seeders || 0));
+        results.sort((a, b) =>
+          Number(Boolean(b.url)) - Number(Boolean(a.url)) ||
+          qualityScore(b.quality) - qualityScore(a.quality) ||
+          Number(b.seeders || 0) - Number(a.seeders || 0)
+        );
         return { streams: results.map((result) => resultToStream(result, { name, series: type === 'series' ? parsed : null })).filter(Boolean) };
       });
     } catch (error) {
@@ -82,10 +147,22 @@ export function createFromEnv(env = process.env) {
   const url = new URL(sourceUrl);
   const allowPrivate = ['localhost', '127.0.0.1', '::1'].includes(url.hostname) && env.NODE_ENV !== 'production';
   const common = { baseUrl: url.href, apiKey: env.SOURCE_API_KEY, maxResponseBytes: Number(env.MAX_RESPONSE_BYTES) || 1048576 };
-  const client = url.hostname === 'pelispanda.org'
+  const pelisPandaClient = url.hostname === 'pelispanda.org'
     ? new PelisPandaClient({ ...common, metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/', catalogFallbackPages: Number(env.CATALOG_FALLBACK_PAGES) || 10 })
     : new SourceClient({ ...common, allowPrivate });
-  return createAddon({ name: env.ADDON_NAME || 'PelisPanda Addon', id: env.ADDON_ID || 'org.example.authorized-torrents', client, ttlSeconds: Number(env.CACHE_TTL_SECONDS) || 300 });
+  const novaClient = env.NOVA_ENABLED === 'false' ? null : new NovaClient({
+    baseUrl: env.NOVA_API_URL || 'https://syntorq.com/api/',
+    metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/',
+    maxResponseBytes: Number(env.NOVA_MAX_RESPONSE_BYTES) || 4 * 1024 * 1024
+  });
+  const client = novaClient ? new CombinedClient([pelisPandaClient, novaClient]) : pelisPandaClient;
+  return createAddon({
+    name: env.ADDON_NAME || 'streaMX',
+    id: env.ADDON_ID || 'com.streamx.addon',
+    client,
+    novaClient,
+    ttlSeconds: Number(env.CACHE_TTL_SECONDS) || 300
+  });
 }
 
 export function createHttpApp(addon = createFromEnv()) {
@@ -100,5 +177,5 @@ export default app;
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PORT) || 7000;
-  app.listen(port, () => console.log(`PelisPanda Addon disponible en http://127.0.0.1:${port}/manifest.json`));
+  app.listen(port, () => console.log(`streaMX disponible en http://127.0.0.1:${port}/manifest.json`));
 }

@@ -5,6 +5,17 @@ export const isValidInfoHash = (value) =>
   typeof value === 'string' && (/^[a-f\d]{40}$/i.test(value) || /^[A-Z2-7]{32}$/i.test(value));
 
 export function parseStremioId(type, id) {
+  const novaMovie = type === 'movie' && /^nova:movie:(\d+)$/.exec(id);
+  if (novaMovie) return { type, novaId: Number(novaMovie[1]) };
+  const novaSeries = type === 'series' && /^nova:series:(\d+):(\d+):(\d+)$/.exec(id);
+  if (novaSeries) {
+    return {
+      type,
+      novaId: Number(novaSeries[1]),
+      season: Number(novaSeries[2]),
+      episode: Number(novaSeries[3])
+    };
+  }
   if (type === 'movie' && /^(tt\d+)$/.test(id)) return { imdbId: id };
   const match = type === 'series' && /^(tt\d+):(\d+):(\d+)$/.exec(id);
   if (!match) return null;

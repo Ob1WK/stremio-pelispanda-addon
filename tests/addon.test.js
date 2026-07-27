@@ -27,4 +27,16 @@ describe('streams', () => {
     const addon = createAddon({ client: { search: async () => { throw new Error('fallo'); } }, logger: { error() {} } });
     expect(await addon.get('stream', 'movie', 'tt123')).toEqual({ streams: [] });
   });
+  it('publica los catálogos de NOVA con el nombre streaMX', async () => {
+    const novaClient = {
+      catalog: vi.fn(async () => [{ id: 'nova:movie:1', type: 'movie', name: 'Película NOVA' }]),
+      meta: vi.fn()
+    };
+    const addon = createAddon({ client: { search: async () => [] }, novaClient });
+    expect(addon.manifest.name).toBe('streaMX');
+    expect(addon.manifest.catalogs.map((catalog) => catalog.id)).toContain('streamx-nova-movies');
+    await expect(addon.get('catalog', 'movie', 'streamx-nova-movies')).resolves.toEqual({
+      metas: [{ id: 'nova:movie:1', type: 'movie', name: 'Película NOVA' }]
+    });
+  });
 });

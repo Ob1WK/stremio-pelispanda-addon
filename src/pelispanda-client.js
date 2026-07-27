@@ -48,6 +48,7 @@ export function parseMagnet(download, episodeMatched = false) {
   const trackers = magnet.searchParams.getAll('tr');
   const name = magnet.searchParams.get('dn') || download.title;
   return {
+    provider: 'PelisPanda',
     title: name || download.quality,
     infoHash,
     quality: download.quality,
@@ -67,6 +68,10 @@ export class PelisPandaClient {
     this.api = new SourceClient({ baseUrl, apiKey, timeoutMs, maxResponseBytes, fetchImpl });
     this.metadata = new SourceClient({ baseUrl: metadataUrl, timeoutMs, maxResponseBytes, fetchImpl });
     this.catalogFallbackPages = Math.min(25, Math.max(0, Number(catalogFallbackPages) || 0));
+  }
+
+  supports(params) {
+    return Boolean(params?.imdbId);
   }
 
   async findInCatalog({ tmdbId, title, year, type }) {

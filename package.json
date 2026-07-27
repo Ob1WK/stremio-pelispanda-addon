@@ -1,6 +1,6 @@
 {
-  "name": "authorized-torrent-stremio-addon",
-  "version": "1.0.0",
+  "name": "streamx-stremio-addon",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "engines": {
