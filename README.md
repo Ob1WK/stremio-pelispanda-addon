@@ -1,6 +1,6 @@
 # streaMX para Stremio
 
-Addon de Node.js 20+ que combina los torrents de PelisPanda con los streams HTTP/HLS directos y latinos de NOVA. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
+Addon de Node.js 20+ que combina los torrents de PelisPanda con los streams HTTP/HLS directos de NOVA y Cineby. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
 
 streaMX descarta los reproductores web, los embeds y las fuentes de NOVA que no estén marcadas como latino. Solo muestra fuentes NOVA que Stremio pueda reproducir internamente.
 
@@ -23,6 +23,9 @@ Edite `.env`:
 - `NOVA_ENABLED`: use `false` para desactivar NOVA; por defecto está activo.
 - `NOVA_API_URL`: URL base de NOVA. El valor predeterminado es `https://syntorq.com/api/`.
 - `NOVA_MAX_RESPONSE_BYTES`: límite de las respuestas JSON de NOVA (por defecto 4 MiB).
+- `CINEBY_ENABLED`: use `false` para desactivar Cineby; por defecto está activo.
+- `CINEBY_API_URL`: URL de la API usada por el reproductor de Cineby/Vidking.
+- `CINEBY_MAX_RESPONSE_BYTES`: límite de las respuestas de Cineby (por defecto 4 MiB).
 - `CATALOG_FALLBACK_PAGES`: páginas de 100 resultados que se revisan por TMDB cuando `/search` no indexa el título original; máximo 25.
 - `CACHE_TTL_SECONDS`: duración de la caché en memoria.
 - `MAX_RESPONSE_BYTES`: límite de la respuesta JSON (por defecto 1 MiB).
@@ -46,7 +49,7 @@ npm start
 
 En PowerShell use `$env:SOURCE_API_URL="http://127.0.0.1:7100"` antes de `npm.cmd start`. Sin esa variable, el addon consulta directamente la API pública de PelisPanda.
 
-Abra `http://localhost:7000/manifest.json` e instale esa URL en Stremio. Además de ofrecer PelisPanda y NOVA sobre fichas IMDb normales, aparecerán los catálogos `streaMX · NOVA Películas` y `streaMX · NOVA Series`.
+Abra `http://localhost:7000/manifest.json` e instale esa URL en Stremio. Además de ofrecer PelisPanda, NOVA y Cineby sobre fichas IMDb normales, aparecerán los catálogos `streaMX · NOVA Películas` y `streaMX · NOVA Series`.
 
 Para probar desde otro dispositivo de la red local, permita el puerto `7000` en el firewall y use la IP LAN de la computadora, por ejemplo `http://192.168.1.20:7000/manifest.json`. Ambos dispositivos deben estar en la misma red. Algunas versiones o plataformas de Stremio pueden exigir HTTPS para addons remotos.
 
@@ -70,6 +73,9 @@ METADATA_API_URL=https://v3-cinemeta.strem.io/
 NOVA_ENABLED=true
 NOVA_API_URL=https://syntorq.com/api/
 NOVA_MAX_RESPONSE_BYTES=4194304
+CINEBY_ENABLED=true
+CINEBY_API_URL=https://api.speedracelight.com/
+CINEBY_MAX_RESPONSE_BYTES=4194304
 CATALOG_FALLBACK_PAGES=10
 CACHE_TTL_SECONDS=300
 MAX_RESPONSE_BYTES=1048576

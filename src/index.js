@@ -7,6 +7,7 @@ import { TtlCache } from './cache.js';
 import { SourceClient } from './source-client.js';
 import { PelisPandaClient } from './pelispanda-client.js';
 import { CombinedClient, NovaClient } from './nova-client.js';
+import { CinebyClient } from './cineby-client.js';
 import { isValidInfoHash, parseStremioId, safeTrackers } from './validators.js';
 
 const { addonBuilder, getRouter } = stremioSdk;
@@ -109,9 +110,9 @@ export function createAddon({ name = 'streaMX', id = 'com.streamx.addon', client
   ] : [];
   const builder = new addonBuilder({
     id,
-    version: '2.1.1',
+    version: '2.2.0',
     name,
-    description: 'Streams de PelisPanda y NOVA, con catálogos NOVA integrados',
+    description: 'Streams de PelisPanda, NOVA y Cineby, con catálogos NOVA integrados',
     resources: novaClient ? ['catalog', 'meta', 'stream'] : ['stream'],
     types: ['movie', 'series'],
     catalogs,
@@ -189,7 +190,13 @@ export function createFromEnv(env = process.env) {
       (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : null) ||
       `http://127.0.0.1:${Number(env.PORT) || 7000}`
   });
-  const client = novaClient ? new CombinedClient([pelisPandaClient, novaClient]) : pelisPandaClient;
+  const cinebyClient = env.CINEBY_ENABLED === 'false' ? null : new CinebyClient({
+    baseUrl: env.CINEBY_API_URL || 'https://api.speedracelight.com/',
+    metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/',
+    maxResponseBytes: Number(env.CINEBY_MAX_RESPONSE_BYTES) || 4 * 1024 * 1024
+  });
+  const clients = [pelisPandaClient, novaClient, cinebyClient].filter(Boolean);
+  const client = clients.length > 1 ? new CombinedClient(clients) : clients[0];
   const configuredName = String(env.ADDON_NAME || '').trim();
   const configuredId = String(env.ADDON_ID || '').trim();
   const name = !configuredName || /^pelispanda(?: addon)?$/i.test(configuredName) ? 'streaMX' : configuredName;
