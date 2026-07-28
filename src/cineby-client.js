@@ -113,7 +113,7 @@ export function decryptCinebyPayload(payload, seed, mediaId) {
   return JSON.parse(bytes.subarray(PAYLOAD_PREFIX.length).toString('utf8'));
 }
 
-function playableSources(payload, server) {
+function playableSources(payload, server, mediaProxyBaseUrl) {
   const seen = new Set();
   return (Array.isArray(payload?.sources) ? payload.sources : []).map((source) => {
     let url;
@@ -125,11 +125,17 @@ function playableSources(payload, server) {
     if (!['http:', 'https:'].includes(url.protocol) || seen.has(url.href)) return null;
     if (!/\.(?:m3u8|mpd)(?:$|[?#])/i.test(url.href)) return null;
     seen.add(url.href);
+    let playableUrl = url.href;
+    if (mediaProxyBaseUrl && url.pathname.toLowerCase().endsWith('.m3u8')) {
+      const proxyUrl = new URL('/cineby-media', mediaProxyBaseUrl);
+      proxyUrl.searchParams.set('url', url.href);
+      playableUrl = proxyUrl.href;
+    }
     return {
       provider: 'Cineby',
       host: server,
       quality: source.quality || 'Auto',
-      url: url.href,
+      url: playableUrl,
       behaviorHints: {
         notWebReady: false,
         proxyHeaders: {
@@ -170,6 +176,7 @@ export class CinebyClient {
     metadataUrl = 'https://v3-cinemeta.strem.io/',
     timeoutMs = 10_000,
     maxResponseBytes = 4 * 1024 * 1024,
+    mediaProxyBaseUrl,
     servers = DEFAULT_SERVERS,
     fetchImpl = fetch
   } = {}) {
@@ -177,6 +184,7 @@ export class CinebyClient {
     this.metadata = new SourceClient({ baseUrl: metadataUrl, timeoutMs, maxResponseBytes, fetchImpl });
     this.timeoutMs = timeoutMs;
     this.maxResponseBytes = maxResponseBytes;
+    this.mediaProxyBaseUrl = mediaProxyBaseUrl;
     this.servers = servers;
     this.fetch = fetchImpl;
   }
@@ -229,7 +237,11 @@ export class CinebyClient {
       _t: Date.now()
     })) sourceUrl.searchParams.set(key, String(value));
     const encrypted = await readLimitedText(await this.request(sourceUrl), this.maxResponseBytes);
-    return playableSources(decryptCinebyPayload(encrypted, seedData.seed, media.tmdbId), server);
+    return playableSources(
+      decryptCinebyPayload(encrypted, seedData.seed, media.tmdbId),
+      server,
+      this.mediaProxyBaseUrl
+    );
   }
 
   async search({ imdbId, season, episode }) {

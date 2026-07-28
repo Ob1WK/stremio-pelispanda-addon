@@ -12,6 +12,11 @@ import { isValidInfoHash, parseStremioId, safeTrackers } from './validators.js';
 
 const { addonBuilder, getRouter } = stremioSdk;
 const NOVA_DIRECT_HOSTS = new Set(['inyoutv.com', 'www.inyoutv.com', 'saludvdt.com', 'www.saludvdt.com']);
+const CINEBY_MEDIA_HOSTS = new Set([
+  'moon.ironwallnet.net',
+  'solaratom.site',
+  'winterforest.site'
+]);
 
 function isAllowedNovaMediaUrl(url) {
   return ['http:', 'https:'].includes(url.protocol) && NOVA_DIRECT_HOSTS.has(url.hostname.toLowerCase());
@@ -39,6 +44,54 @@ async function fetchNovaMedia(url, range) {
     return response;
   }
   throw new Error('Demasiadas redirecciones');
+}
+
+function isAllowedCinebyMediaUrl(url) {
+  return url.protocol === 'https:' &&
+    CINEBY_MEDIA_HOSTS.has(url.hostname.toLowerCase()) &&
+    url.pathname.startsWith('/vd/');
+}
+
+async function fetchCinebyMedia(url, range) {
+  let current = url;
+  for (let redirect = 0; redirect < 5; redirect += 1) {
+    if (!isAllowedCinebyMediaUrl(current)) throw new Error('Host de Cineby no permitido');
+    const response = await fetch(current, {
+      redirect: 'manual',
+      headers: {
+        Accept: '*/*',
+        'User-Agent': 'Mozilla/5.0 streaMX',
+        Referer: 'https://www.vidking.net/',
+        Origin: 'https://www.vidking.net',
+        ...(range ? { Range: range } : {})
+      }
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location');
+      if (!location) return response;
+      current = new URL(location, current);
+      continue;
+    }
+    return response;
+  }
+  throw new Error('Demasiadas redirecciones');
+}
+
+function rewriteCinebyPlaylist(body, sourceUrl, addonBaseUrl) {
+  return body.split(/\r?\n/).map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) return line;
+    let mediaUrl;
+    try {
+      mediaUrl = new URL(trimmed, sourceUrl);
+    } catch {
+      return line;
+    }
+    if (!isAllowedCinebyMediaUrl(mediaUrl)) return line;
+    const proxyUrl = new URL('/cineby-media', addonBaseUrl);
+    proxyUrl.searchParams.set('url', mediaUrl.href);
+    return proxyUrl.href;
+  }).join('\n');
 }
 
 const qualityScore = (quality = '') => {
@@ -110,7 +163,7 @@ export function createAddon({ name = 'streaMX', id = 'com.streamx.addon', client
   ] : [];
   const builder = new addonBuilder({
     id,
-    version: '2.2.0',
+    version: '2.2.1',
     name,
     description: 'Streams de PelisPanda, NOVA y Cineby, con catálogos NOVA integrados',
     resources: novaClient ? ['catalog', 'meta', 'stream'] : ['stream'],
@@ -193,7 +246,11 @@ export function createFromEnv(env = process.env) {
   const cinebyClient = env.CINEBY_ENABLED === 'false' ? null : new CinebyClient({
     baseUrl: env.CINEBY_API_URL || 'https://api.speedracelight.com/',
     metadataUrl: env.METADATA_API_URL || 'https://v3-cinemeta.strem.io/',
-    maxResponseBytes: Number(env.CINEBY_MAX_RESPONSE_BYTES) || 4 * 1024 * 1024
+    maxResponseBytes: Number(env.CINEBY_MAX_RESPONSE_BYTES) || 4 * 1024 * 1024,
+    mediaProxyBaseUrl: env.ADDON_BASE_URL ||
+      (env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${env.VERCEL_PROJECT_PRODUCTION_URL}` : null) ||
+      (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : null) ||
+      `http://127.0.0.1:${Number(env.PORT) || 7000}`
   });
   const clients = [pelisPandaClient, novaClient, cinebyClient].filter(Boolean);
   const client = clients.length > 1 ? new CombinedClient(clients) : clients[0];
@@ -212,6 +269,7 @@ export function createFromEnv(env = process.env) {
 
 export function createHttpApp(addon = createFromEnv()) {
   const app = express();
+  app.set('trust proxy', true);
   app.disable('x-powered-by');
   app.get('/nova-media', async (request, response) => {
     let source;
@@ -233,6 +291,36 @@ export function createHttpApp(addon = createFromEnv()) {
       Readable.fromWeb(upstream.body).pipe(response);
     } catch {
       return response.status(502).json({ error: 'No se pudo abrir la fuente directa' });
+    }
+  });
+  app.get('/cineby-media', async (request, response) => {
+    try {
+      const source = new URL(String(request.query.url || ''));
+      if (!isAllowedCinebyMediaUrl(source)) {
+        return response.status(403).json({ error: 'Proveedor de Cineby no habilitado' });
+      }
+      const upstream = await fetchCinebyMedia(source, request.headers.range);
+      if (!upstream.ok && upstream.status !== 206) {
+        return response.status(upstream.status).json({ error: 'La fuente de Cineby no respondió' });
+      }
+      response.setHeader('Access-Control-Allow-Origin', '*');
+      response.setHeader('Cache-Control', 'private, no-store');
+      if (source.pathname.toLowerCase().endsWith('.m3u8')) {
+        const body = await upstream.text();
+        const addonBaseUrl = `${request.protocol}://${request.get('host')}`;
+        response.type('application/vnd.apple.mpegurl');
+        return response.send(rewriteCinebyPlaylist(body, source, addonBaseUrl));
+      }
+      for (const name of ['content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified']) {
+        const value = upstream.headers.get(name);
+        if (value) response.setHeader(name, value);
+      }
+      response.type('video/mp2t');
+      response.status(upstream.status);
+      if (!upstream.body) return response.end();
+      Readable.fromWeb(upstream.body).pipe(response);
+    } catch {
+      return response.status(502).json({ error: 'No se pudo abrir la fuente de Cineby' });
     }
   });
   app.use('/', getRouter(addon));

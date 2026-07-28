@@ -4,6 +4,8 @@ Addon de Node.js 20+ que combina los torrents de PelisPanda con los streams HTTP
 
 streaMX descarta los reproductores web, los embeds y las fuentes de NOVA que no estén marcadas como latino. Solo muestra fuentes NOVA que Stremio pueda reproducir internamente.
 
+Las listas HLS de Cineby se retransmiten mediante el addon porque el proveedor publica sus fragmentos de video con extensión y tipo MIME de imagen. `ADDON_BASE_URL` debe contener la URL pública HTTPS correcta fuera de Vercel; en Vercel se detecta automáticamente.
+
 ## Instalación y configuración
 
 ```bash
