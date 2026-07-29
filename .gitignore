@@ -1,4 +1,5 @@
 node_modules/
+.apk-analysis/
 .env
 .env.*
 !.env.example

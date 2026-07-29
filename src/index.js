@@ -8,6 +8,7 @@ import { SourceClient } from './source-client.js';
 import { PelisPandaClient } from './pelispanda-client.js';
 import { CombinedClient, NovaClient } from './nova-client.js';
 import { CinebyClient } from './cineby-client.js';
+import { Embed69Client } from './embed69-client.js';
 import { isValidInfoHash, parseStremioId, safeTrackers } from './validators.js';
 
 const { addonBuilder, getRouter } = stremioSdk;
@@ -163,9 +164,9 @@ export function createAddon({ name = 'streaMX', id = 'com.streamx.addon', client
   ] : [];
   const builder = new addonBuilder({
     id,
-    version: '2.2.1',
+    version: '2.3.0',
     name,
-    description: 'Streams de PelisPanda, NOVA y Cineby, con catálogos NOVA integrados',
+    description: 'Streams de PelisPanda, NOVA, Cineby y Embed69, con catálogos NOVA integrados',
     resources: novaClient ? ['catalog', 'meta', 'stream'] : ['stream'],
     types: ['movie', 'series'],
     catalogs,
@@ -252,7 +253,11 @@ export function createFromEnv(env = process.env) {
       (env.VERCEL_URL ? `https://${env.VERCEL_URL}` : null) ||
       `http://127.0.0.1:${Number(env.PORT) || 7000}`
   });
-  const clients = [pelisPandaClient, novaClient, cinebyClient].filter(Boolean);
+  const embed69Client = env.EMBED69_ENABLED === 'false' ? null : new Embed69Client({
+    baseUrl: env.EMBED69_BASE_URL || 'https://embed69.org/f/',
+    maxResponseBytes: Number(env.EMBED69_MAX_RESPONSE_BYTES) || 512 * 1024
+  });
+  const clients = [pelisPandaClient, novaClient, cinebyClient, embed69Client].filter(Boolean);
   const client = clients.length > 1 ? new CombinedClient(clients) : clients[0];
   const configuredName = String(env.ADDON_NAME || '').trim();
   const configuredId = String(env.ADDON_ID || '').trim();

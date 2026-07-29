@@ -1,8 +1,8 @@
 # streaMX para Stremio
 
-Addon de Node.js 20+ que combina los torrents de PelisPanda con los streams HTTP/HLS directos de NOVA y Cineby. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
+Addon de Node.js 20+ que combina los torrents de PelisPanda con streams HTTP/HLS de NOVA, Cineby y Embed69. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
 
-streaMX descarta los reproductores web, los embeds y las fuentes de NOVA que no estén marcadas como latino. Solo muestra fuentes NOVA que Stremio pueda reproducir internamente.
+streaMX descarta los reproductores web y las fuentes que no pueda entregar como HLS/MP4. Las fuentes directas se reproducen dentro de Stremio.
 
 Las listas HLS de Cineby se retransmiten mediante el addon porque el proveedor publica sus fragmentos de video con extensión y tipo MIME de imagen. `ADDON_BASE_URL` debe contener la URL pública HTTPS correcta fuera de Vercel; en Vercel se detecta automáticamente.
 
@@ -22,6 +22,9 @@ Edite `.env`:
 - `SOURCE_API_URL`: URL base de PelisPanda. El valor predeterminado es `https://pelispanda.org/wp-json/wpreact/v1/`.
 - `SOURCE_API_KEY`: opcional; se envía como `Authorization: Bearer <clave>`.
 - `METADATA_API_URL`: API de metadatos de Stremio/Cinemeta usada para traducir IMDb a TMDB. El resultado de PelisPanda se valida por coincidencia exacta de `tmdb_id`.
+- `EMBED69_ENABLED`: use `false` para ocultar Embed69 (activo por defecto).
+- `EMBED69_BASE_URL`: ruta HTTPS del reproductor autorizado; por defecto `https://embed69.org/f/`.
+- `EMBED69_MAX_RESPONSE_BYTES`: límite usado al comprobar que el reproductor tenga fuentes (por defecto 512 KiB).
 - `NOVA_ENABLED`: use `false` para desactivar NOVA; por defecto está activo.
 - `NOVA_API_URL`: URL base de NOVA. El valor predeterminado es `https://syntorq.com/api/`.
 - `NOVA_MAX_RESPONSE_BYTES`: límite de las respuestas JSON de NOVA (por defecto 4 MiB).
