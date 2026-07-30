@@ -48,6 +48,6 @@ describe('streams', () => {
     });
     expect(addon.manifest.name).toBe('streaMX');
     expect(addon.manifest.id).toBe('com.streamx.addon');
-    expect(addon.manifest.version).toBe('2.3.0');
+    expect(addon.manifest.version).toBe('2.5.0');
   });
 });

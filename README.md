@@ -1,10 +1,8 @@
 # streaMX para Stremio
 
-Addon de Node.js 20+ que combina los torrents de PelisPanda con streams HTTP/HLS de NOVA, Cineby y Embed69. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
+Addon de Node.js 20+ que combina los torrents de PelisPanda y MiTorrent con streams HTTP/HLS de NOVA y Embed69. También publica catálogos propios de películas y series de NOVA dentro de Stremio.
 
 streaMX descarta los reproductores web y las fuentes que no pueda entregar como HLS/MP4. Las fuentes directas se reproducen dentro de Stremio.
-
-Las listas HLS de Cineby se retransmiten mediante el addon porque el proveedor publica sus fragmentos de video con extensión y tipo MIME de imagen. `ADDON_BASE_URL` debe contener la URL pública HTTPS correcta fuera de Vercel; en Vercel se detecta automáticamente.
 
 ## Instalación y configuración
 
@@ -25,17 +23,19 @@ Edite `.env`:
 - `EMBED69_ENABLED`: use `false` para ocultar Embed69 (activo por defecto).
 - `EMBED69_BASE_URL`: ruta HTTPS del reproductor autorizado; por defecto `https://embed69.org/f/`.
 - `EMBED69_MAX_RESPONSE_BYTES`: límite usado al comprobar que el reproductor tenga fuentes (por defecto 512 KiB).
+- `MITORRENT_ENABLED`: use `false` para desactivar MiTorrent; por defecto está activo.
+- `MITORRENT_BASE_URL`: sitio HTTPS de MiTorrent; por defecto `https://mitorrent.mx/`.
+- `MITORRENT_MAX_RESPONSE_BYTES`: límite de cada página HTML de MiTorrent o su acortador (por defecto 2 MiB).
 - `NOVA_ENABLED`: use `false` para desactivar NOVA; por defecto está activo.
 - `NOVA_API_URL`: URL base de NOVA. El valor predeterminado es `https://syntorq.com/api/`.
 - `NOVA_MAX_RESPONSE_BYTES`: límite de las respuestas JSON de NOVA (por defecto 4 MiB).
-- `CINEBY_ENABLED`: use `false` para desactivar Cineby; por defecto está activo.
-- `CINEBY_API_URL`: URL de la API usada por el reproductor de Cineby/Vidking.
-- `CINEBY_MAX_RESPONSE_BYTES`: límite de las respuestas de Cineby (por defecto 4 MiB).
 - `CATALOG_FALLBACK_PAGES`: páginas de 100 resultados que se revisan por TMDB cuando `/search` no indexa el título original; máximo 25.
 - `CACHE_TTL_SECONDS`: duración de la caché en memoria.
 - `MAX_RESPONSE_BYTES`: límite de la respuesta JSON (por defecto 1 MiB).
 
 El addon usa los endpoints públicos observados de PelisPanda: `/search`, `/movie/{slug}`, `/serie/{slug}` y sus rutas `/related`, donde la API también entrega los torrents de episodios. Primero identifica resultados mediante `tmdb_id`; si PelisPanda tiene ese ID ausente o incorrecto, permite una coincidencia exacta y normalizada con `title` u `original_title`, siempre exigiendo también el mismo tipo y año. Los magnets se interpretan como datos; nunca se evalúa JavaScript de la fuente. En producción, la fuente debe ser HTTP(S) pública. Los hosts privados se permiten solamente para `localhost`/`127.0.0.1` fuera de producción, facilitando la API simulada.
+
+MiTorrent se consulta mediante su buscador HTML público porque su REST de WordPress no expone las fichas. El cliente exige coincidencia de tipo, título y año. Para películas resuelve los enlaces de calidad del acortador mediante solicitudes HTTP aisladas y extrae solamente magnets válidos. Para series usa el selector de temporada publicado por el sitio y devuelve exclusivamente los magnets cuyo nombre coincide con el episodio solicitado. No ejecuta JavaScript remoto ni abre anuncios.
 
 ## Prueba local
 
@@ -54,7 +54,7 @@ npm start
 
 En PowerShell use `$env:SOURCE_API_URL="http://127.0.0.1:7100"` antes de `npm.cmd start`. Sin esa variable, el addon consulta directamente la API pública de PelisPanda.
 
-Abra `http://localhost:7000/manifest.json` e instale esa URL en Stremio. Además de ofrecer PelisPanda, NOVA y Cineby sobre fichas IMDb normales, aparecerán los catálogos `streaMX · NOVA Películas` y `streaMX · NOVA Series`.
+Abra `http://localhost:7000/manifest.json` e instale esa URL en Stremio. Además de ofrecer PelisPanda, MiTorrent, NOVA y Embed69 sobre fichas IMDb normales, aparecerán los catálogos `streaMX · NOVA Películas` y `streaMX · NOVA Series`.
 
 Para probar desde otro dispositivo de la red local, permita el puerto `7000` en el firewall y use la IP LAN de la computadora, por ejemplo `http://192.168.1.20:7000/manifest.json`. Ambos dispositivos deben estar en la misma red. Algunas versiones o plataformas de Stremio pueden exigir HTTPS para addons remotos.
 
@@ -78,9 +78,9 @@ METADATA_API_URL=https://v3-cinemeta.strem.io/
 NOVA_ENABLED=true
 NOVA_API_URL=https://syntorq.com/api/
 NOVA_MAX_RESPONSE_BYTES=4194304
-CINEBY_ENABLED=true
-CINEBY_API_URL=https://api.speedracelight.com/
-CINEBY_MAX_RESPONSE_BYTES=4194304
+MITORRENT_ENABLED=true
+MITORRENT_BASE_URL=https://mitorrent.mx/
+MITORRENT_MAX_RESPONSE_BYTES=2097152
 CATALOG_FALLBACK_PAGES=10
 CACHE_TTL_SECONDS=300
 MAX_RESPONSE_BYTES=1048576
